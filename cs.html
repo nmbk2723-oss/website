@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heartland Breach & SQL Injection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+/* 1. CORE SETUP */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #0f172a; /* Dark Slate */
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden; /* Prevent scrolling */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', sans-serif;
+}
+
+/* 2. SLIDE CONTAINER - ADAPTED FOR PRESENTATION MODE */
+.slide-container {
+  align-items: center;
+  background-color: #1e293b;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  display: none; /* Hidden by default */
+  flex-direction: column;
+  height: 720px;
+  width: 1280px; /* Fixed base size for scaling */
+  justify-content: center;
+  overflow: hidden; 
+  padding: 60px;
+  position: absolute; /* Stack on top of each other */
+  border: 1px solid #334155;
+  z-index: 1;
+  /* Smooth Fade Transition */
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.slide-container.active {
+    display: flex;
+    opacity: 1;
+}
+
+/* Decorative Top Bar */
+.slide-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 6px;
+  background: linear-gradient(90deg, #10b981, #3b82f6);
+  z-index: 2;
+}
+
+/* 3. NAVIGATION CONTROLS */
+.nav-controls {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+    display: flex;
+    gap: 10px;
+}
+
+.nav-btn {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    transition: background 0.2s;
+}
+
+.nav-btn:hover { background: #2563eb; }
+.nav-btn:disabled { background: #475569; cursor: not-allowed; }
+
+.slide-counter {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    color: #64748b;
+    font-family: 'JetBrains Mono', monospace;
+    z-index: 100;
+}
+
+/* 4. TYPOGRAPHY */
+.slide-container h1 {
+  font-size: 72px;
+  line-height: 1.1;
+  background: linear-gradient(to right, #ffffff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0 0 20px 0;
+  font-weight: 800;
+}
+
+.slide-container h2.slide-title {
+  font-size: 48px;
+  margin: 0 0 40px 0;
+  color: #f8fafc;
+  border-left: 5px solid #10b981;
+  padding-left: 20px;
+  width: 100%;
+  text-align: left;
+}
+
+.slide-container h3 {
+  color: #3b82f6;
+  font-size: 28px;
+  margin: 0 0 15px 0;
+}
+
+.slide-container p, 
+.slide-container li {
+  color: #cbd5e1;
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+/* 5. LAYOUT UTILITIES */
+.content-area {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  width: 100%;
+  justify-content: center;
+  z-index: 10; /* Ensures content is above background */
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  width: 100%;
+  align-items: center;
+}
+
+.image-wrapper {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  border: 1px solid #475569;
+  height: 400px;
+}
+.image-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.highlight-box {
+    background: #334155;
+    padding: 30px;
+    border-radius: 12px;
+    border: 1px solid #475569;
+}
+
+/* 6. SIMULATION CSS */
+.sim-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+}
+
+.sim-controls {
+    background: #0f172a;
+    padding: 30px;
+    border-radius: 12px;
+    border: 1px solid #334155;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.sim-display {
+    background: #000;
+    padding: 30px;
+    border-radius: 12px;
+    border: 1px solid #10b981;
+    font-family: 'JetBrains Mono', monospace;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+}
+
+.sim-label {
+    color: #94a3b8;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+.sim-input {
+    background: #1e293b;
+    border: 1px solid #475569;
+    color: #fff;
+    padding: 12px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    width: 100%;
+}
+
+.sim-btn {
+    padding: 12px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+
+.btn-primary { background: #3b82f6; color: white; }
+.btn-primary:hover { background: #2563eb; }
+
+.btn-hack { background: #ef4444; color: white; }
+.btn-hack:hover { background: #dc2626; }
+
+.btn-reset { background: #475569; color: white; font-size: 14px;}
+
+.code-line {
+    color: #64748b;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.query-text {
+    color: #e2e8f0;
+    font-size: 18px;
+    line-height: 1.5;
+}
+
+.query-highlight {
+    color: #f43f5e; /* Red for injection */
+    font-weight: bold;
+}
+
+.status-box {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 20px;
+}
+
+.status-denied { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; }
+.status-granted { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981; }
+
+    </style>
+</head>
+<body>
+
+<!-- Slide 1: Title -->
+<div class="slide-container active" id="slide1">
+    <div style="text-align: center; max-width: 900px;">
+        <h1>The Heartland Breach</h1>
+        <h3 style="color: #10b981; font-family: 'JetBrains Mono', monospace;">CASE STUDY: SQL INJECTION</h3>
+        <p style="margin-top: 30px;">A technical deep dive into how a simple coding error exposed 130 million credit cards.</p>
+    </div>
+</div>
+
+<!-- Slide 2: Context -->
+<div class="slide-container" id="slide2">
+    <h2 class="slide-title">The Context</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div>
+                <h3>The Target: Heartland Payment Systems</h3>
+                <p>Heartland wasn't a bank; it was the digital bridge between merchants and banks.</p>
+                <ul style="margin-top: 20px;">
+                    <li><strong>Scale:</strong> 100M+ transactions/month.</li>
+                    <li><strong>Value:</strong> Processed raw magnetic stripe data (Track 1/Track 2).</li>
+                    <li><strong>Vulnerability:</strong> A public-facing admin login page that lacked input validation.</li>
+                </ul>
+            </div>
+            <div class="image-wrapper">
+                <img src="http://googleusercontent.com/image_collection/image_retrieval/5001886363444435057" alt="Data center aisle">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 3: The Attack Mechanism -->
+<div class="slide-container" id="slide3">
+    <h2 class="slide-title">Anatomy of the Attack</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div class="highlight-box">
+                <h3 style="color: #f43f5e;"><i class="fa-solid fa-bug"></i> The Flaw</h3>
+                <p>The web application took user input and pasted it directly into a database command.</p>
+                <code style="display:block; background:#0f172a; padding:15px; border-radius:6px; margin-top:10px; font-family:'JetBrains Mono'; color:#cbd5e1;">
+                    SELECT * FROM admins <br>
+                    WHERE user = '<span style="color:#f43f5e">INPUT</span>'
+                </code>
+            </div>
+            <div>
+                <h3>The Exploitation Steps</h3>
+                <ol>
+                    <li><strong>Injection:</strong> Attackers typed SQL code (<code>' OR 1=1 --</code>) into the username field.</li>
+                    <li><strong>Bypass:</strong> The database evaluated <code>1=1</code> as TRUE, granting admin access without a password.</li>
+                    <li><strong>Sniffing:</strong> Once inside, they installed malware to record credit card data moving across the internal network.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slide 4: Interactive Simulation (FIXED & ROBUST) -->
+<div class="slide-container" id="slide4">
+    <h2 class="slide-title">Simulation: Try the Attack</h2>
+    <div class="content-area">
+        <div class="sim-wrapper">
+            <!-- Controls (Left) -->
+            <div class="sim-controls">
+                <div>
+                    <div class="sim-label">Username</div>
+                    <input type="text" id="userInput" class="sim-input" value="admin">
+                </div>
+                <div>
+                    <div class="sim-label">Password</div>
+                    <input type="password" id="passInput" class="sim-input" value="12345">
+                </div>
+                <button class="sim-btn btn-primary" onclick="runLogin()">Check Login</button>
+                <button class="sim-btn btn-reset" onclick="resetSim()">Reset</button>
+            </div>
+
+            <!-- Display (Right) -->
+            <div class="sim-display">
+                <div class="code-line">// Backend Database Query Preview</div>
+                <div class="query-text">
+                    SELECT * FROM users <br>
+                    WHERE user = '<span id="queryPreview">admin</span>' <br>
+                    AND pass = '...';
+                </div>
+                <div id="statusBox" class="status-box status-denied">
+                    ACCESS DENIED
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Self-contained Script for Slide 4 Logic -->
+    <script>
+        function injectPayload() {
+            // Fills the input with the SQL injection string
+            document.getElementById('userInput').value = "admin' OR 1=1 --";
+            // Updates preview and Runs login immediately for better UX
+            runLogin();
+        }
+
+        function resetSim() {
+            document.getElementById('userInput').value = "admin";
+            document.getElementById('passInput').value = "";
+            const status = document.getElementById('statusBox');
+            status.className = "status-box status-denied";
+            status.innerText = "ACCESS DENIED";
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const inputVal = document.getElementById('userInput').value;
+            const preview = document.getElementById('queryPreview');
+            
+            preview.innerText = inputVal;
+            
+            // Highlight if it looks like an injection (checking for single quote or dash)
+            if (inputVal.includes("'") || inputVal.includes("--")) {
+                preview.className = "query-highlight";
+            } else {
+                preview.className = "";
+            }
+        }
+
+        function runLogin() {
+            updatePreview(); // Ensure preview matches input
+            const inputVal = document.getElementById('userInput').value;
+            const passVal = document.getElementById('passInput').value;
+            const status = document.getElementById('statusBox');
+
+            // Robust Simulation Logic
+            // 1. Normalize: Uppercase, remove spaces, convert smart quotes to straight quotes
+            const normalizedInput = inputVal.toUpperCase()
+                                            .replace(/[\u2018\u2019]/g, "'") // Replace smart quotes
+                                            .replace(/\s+/g, ''); // Remove spaces
+            
+            // 2. Logic Checks
+            
+            // Check A: Valid Admin
+            if (inputVal === 'admin' && passVal === 'password123') {
+                status.className = "status-box status-granted";
+                status.innerText = "ACCESS GRANTED (Valid Credentials)";
+                return;
+            }
+
+            // Check B: SQL Injection Attack Detection
+            // We look for the closing quote + OR + a truthy statement (1=1 or '1'='1')
+            // Patterns matched: 'OR1=1, 'OR'1'='1
+            const injectionDetected = normalizedInput.includes("'OR1=1") || 
+                                      normalizedInput.includes("'OR'1'='1");
+
+            if (injectionDetected) {
+                status.className = "status-box status-granted";
+                status.innerHTML = "ACCESS GRANTED <br><span style='font-size:14px; font-weight:normal'>(Bypassed via SQL Injection!)</span>";
+            } else {
+                status.className = "status-box status-denied";
+                status.innerText = "ACCESS DENIED";
+            }
+        }
+    </script>
+</div>
+
+<!-- Slide 5: The Impact -->
+<div class="slide-container" id="slide5">
+    <h2 class="slide-title">The Impact</h2>
+    <div class="content-area">
+        <div style="display: flex; gap: 40px; text-align: center;">
+            <div class="highlight-box" style="flex:1">
+                <div style="font-size: 80px; font-weight: 800; color: #10b981; font-family: 'JetBrains Mono';">130M</div>
+                <p>Credit Cards Stolen</p>
+            </div>
+            <div class="highlight-box" style="flex:1">
+                <div style="font-size: 80px; font-weight: 800; color: #ef4444; font-family: 'JetBrains Mono';">$145M</div>
+                <p>Financial Damages</p>
+            </div>
+        </div>
+        <p style="text-align: center; margin-top: 40px; font-style: italic;">
+            "Heartland was temporarily banned from processing payments by Visa/MasterCard, effectively freezing their business."
+        </p>
+    </div>
+</div>
+
+<!-- Slide 6: Prevention & Conclusion -->
+<div class="slide-container" id="slide6">
+    <h2 class="slide-title">Prevention Strategies</h2>
+    <div class="content-area">
+        <div class="two-column">
+            <div class="highlight-box">
+                <div style="font-size: 40px; color: #3b82f6; margin-bottom: 20px;"><i class="fa-solid fa-shield-halved"></i></div>
+                <h3>1. Parameterized Queries</h3>
+                <p>Never concatenate strings for SQL commands. Use Prepared Statements that treat user input strictly as data, neutralizing the injection.</p>
+            </div>
+            <div class="highlight-box">
+                <div style="font-size: 40px; color: #10b981; margin-bottom: 20px;"><i class="fa-solid fa-lock"></i></div>
+                <h3>2. End-to-End Encryption</h3>
+                <p>Heartland failed because data was unencrypted inside their network. Modern P2PE standards ensure data is unreadable from swipe to bank.</p>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 40px;">
+            <p><strong>Conclusion:</strong> Basic coding hygiene is the first line of defense against catastrophic failure.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Navigation Interface -->
+<div class="slide-counter" id="slideCounter">Slide 1 / 6</div>
+<div class="nav-controls">
+    <button class="nav-btn" id="btnPrev" onclick="changeSlide(-1)">Previous</button>
+    <button class="nav-btn" id="btnNext" onclick="changeSlide(1)">Next</button>
+</div>
+
+<!-- Global Scripts -->
+<script>
+    // === 1. Slide Navigation Logic ===
+    let currentSlide = 1;
+    const totalSlides = 6;
+
+    function showSlide(n) {
+        // Bounds check
+        if (n > totalSlides) currentSlide = 1;
+        else if (n < 1) currentSlide = totalSlides;
+        else currentSlide = n;
+
+        // Hide all slides
+        const slides = document.querySelectorAll('.slide-container');
+        slides.forEach(slide => {
+            slide.classList.remove('active');
+        });
+
+        // Show current slide
+        document.getElementById('slide' + currentSlide).classList.add('active');
+        
+        // Update Counter
+        document.getElementById('slideCounter').innerText = `Slide ${currentSlide} / ${totalSlides}`;
+        
+        // Ensure simulation event listeners are attached (if we navigated)
+        if(currentSlide === 4) {
+            const userField = document.getElementById('userInput');
+            // Remove old listener to avoid dupes, then re-add
+            userField.removeEventListener('keyup', updatePreview); 
+            userField.addEventListener('keyup', updatePreview);
+            updatePreview();
+        }
+    }
+
+    function changeSlide(direction) {
+        showSlide(currentSlide + direction);
+    }
+
+    // Keyboard Navigation
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'ArrowRight') {
+            changeSlide(1);
+        } else if (event.key === 'ArrowLeft') {
+            changeSlide(-1);
+        }
+    });
+
+    // === 2. Auto-Scaling Logic (Fixes "Out of Frame") ===
+    function scaleSlides() {
+        const baseWidth = 1280;
+        const baseHeight = 720;
+        const slides = document.querySelectorAll('.slide-container');
+        
+        // Calculate scale factor to fit window with some padding
+        const scaleX = window.innerWidth / baseWidth;
+        const scaleY = window.innerHeight / baseHeight;
+        const scale = Math.min(scaleX, scaleY) * 0.95; // 0.95 adds a small margin
+
+        slides.forEach(slide => {
+            slide.style.transform = `scale(${scale})`;
+        });
+    }
+
+    // Run scaling on load and resize
+    window.addEventListener('load', scaleSlides);
+    window.addEventListener('resize', scaleSlides);
+    
+    // Initial Setup
+    showSlide(1);
+    scaleSlides();
+</script>
+
+</body>
+</html>
